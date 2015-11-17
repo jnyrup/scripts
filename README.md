@@ -14,5 +14,7 @@ The table shows how many hits there were on OMDb, IMDb if OMDb failed, or neithe
 | ---- | ---- | ------- |
 | 1165 |     1|       10|
 
+The hit on IMDb was a newer movie, of the 10 titles neither had 9 were danish movies and the last a tv-episode.
+
 ## How to use
 `./icm_get_total_time path-to-csv-file`
