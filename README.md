@@ -16,5 +16,9 @@ The table shows how many hits there were on OMDb, IMDb if OMDb failed, or neithe
 
 The hit on IMDb was a newer movie, of the 10 titles neither had 9 were danish movies and the last a tv-episode.
 
+## Requirements
+python3 libraries: `beautifulsoup4` and `requests`.
+On linux install with `pip3 install requests beautifulsoup4` or `sudo pip3 install requests beautifulsoup4` to make them available for all users.
+
 ## How to use
 `./icm_get_total_time path-to-csv-file`
