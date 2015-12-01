@@ -5,10 +5,20 @@
 	The first row is expected to be headers"""
 import sys, os, csv, requests
 from bs4 import BeautifulSoup
+from operator import itemgetter
+from collections import Counter
+from math import floor
 
 class Stats:
 	skipped = 0
 	runtimes = []
+	histograms = {
+		'Genre' : Counter(),
+		'Runtime' : Counter(),
+		'Country' : Counter(),
+		'Year' : Counter(),
+		'imdbRating' : Counter()
+	}
 
 	def print(self):
 		self.runtimes.sort()
@@ -26,19 +36,37 @@ class Stats:
 		print("%d counted, %d skipped, %d in total" % (counted, self.skipped, (counted + self.skipped)))
 		print("min: %d, max: %d, median: %d, avg %d" % (min_value, max_value, median_value, avg_value))
 
+		for title, hist in sorted(self.histograms.items()):
+			print(title)
+			for k1, v1 in sorted(hist.items(), key=itemgetter(0)):
+				print("\t%s: %s" % ( k1, v1))
+
 	def add(self, time):
 		self.runtimes.append(time)
 
 	def skip(self):
 		self.skipped += 1
 
-def get_from_imdb(session, imdb_url):
-	response = session.get(imdb_url, stream=True)
-	for line in response.iter_lines():
-		if str(line).endswith(' min\''):
-			return int(str(line).split()[1])
-	return False
+def get_from_imdb(session, imdb_url, not_seen, value_saver):
+	genres = []
 
+	response = session.get(imdb_url, stream=True)
+	it = response.iter_lines()
+	for line in it:
+		if not not_seen:
+			break
+		if 'Runtime' in not_seen and str(line).endswith(' min\''):
+			value_saver['Runtime'] = int(str(line).split()[1])
+			del not_seen['Runtime']
+		elif 'Genre' in not_seen and  '><span class="itemprop" itemprop="genre">' in str(line):
+			genres += str(line)[43:].split('<')[0]
+		elif 'Country' in not_seen and '<a href="/country/ee?ref_=tt_dt_dt"' in str(line):
+			value_saver['Country'] = [str(next(it))[17:-5]]
+			del not_seen['Country']
+		elif 'imdbRating' in not_seen and '<div class="titlePageSprite star-box-giga-star">' in str(line):
+			value_saver['imdbRating'] =  [str(line)[59:-8]]
+			del not_seen['imdbRating']
+	value_saver['Genre'] = genres
 def median(lst):
 	lstLen = len(lst)
 	index = (lstLen - 1) // 2
@@ -76,16 +104,42 @@ def getTime(session, csv_file):
 			stats.skip()
 			continue
 
-		try:
-			time = int(info['Runtime'][:-4])
-		except ValueError:
-			time = get_from_imdb(session, imdb_url)
-			if time == False:
-				print('"%s" (%s) has no info on omdbapi/IMDb' % (title, imdb_id))
-				stats.skip()
-				continue
+		hist_values = stats.histograms.keys()
+		not_seen = dict()
+		value_saver = dict()
+		for hist_value in hist_values:
+			if info[hist_value] != 'N/A':
+				if hist_value == 'Runtime':
+					value_saver[hist_value] = [int(info['Runtime'][:-4])]
+				else:
+					value_saver[hist_value] = info[hist_value].split(', ')
+			else:
+				not_seen[hist_value] = True
+		if not_seen:
+			get_from_imdb(session, imdb_url, not_seen, value_saver)
 
-		stats.add(time)
+		if not_seen:
+			print('"%s" (%s) has no %s' % (title, imdb_id, not_seen))
+
+		if 'Runtime' in value_saver:
+			stats.add(value_saver['Runtime'][0])
+		else:
+			stats.skip()
+
+		for k, v in value_saver.items():
+			for v1 in v:
+				key = v1
+				if k == 'Runtime':
+					v1 -= v1 % 15
+					key = "%s-%s" % (str(v1).rjust(3), str(v1+15).rjust(3))
+				elif k == 'Year':
+					v1 = int(v1)
+					v1 -= v1 % 10
+					key = "%d-%d" % (v1, v1+10)
+				elif k == 'imdbRating':
+					v1 = .5 * floor(float(v1)/.5)
+					key = "%.1f-%.1f" % (v1, v1+.5)
+				stats.histograms[k][key] += 1
 
 	stats.print()
 
